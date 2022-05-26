@@ -1,0 +1,5 @@
+*.pyc
+__pycache__/
+*.mp3
+*.wav
+convert.bat
