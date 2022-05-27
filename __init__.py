@@ -1,1 +1,1 @@
-from beatgen import *
+from .beatgen import *
