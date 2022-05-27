@@ -113,13 +113,12 @@ def read_song_data(data_file):
                 elif bass[i] == "0" and kick[i] == "1":
                     bass_or_kick["kick"] += 1
 
-        for i in range(16):
-            if snare[i] == "1" and clap[i] == "1":
-                snare_or_clap["both"] += 1
-            elif snare[i] == "1" and clap[i] == "0":
-                snare_or_clap["snare"] += 1
-            if snare[i] == "0" and clap[i] == "1":
-                snare_or_clap["clap"] += 1
+        if "1" in snare and "1" in clap:
+            snare_or_clap["both"] += 1
+        elif "1" in snare and not "1" in clap:
+            snare_or_clap["snare"] += 1
+        elif "1" not in snare and "1" in clap:
+            snare_or_clap["clap"] += 1
 
         hatroll_amounts = np.append(hatroll_amounts, np.extract(hatroll_pattern != 0, hatroll_pattern))
 
@@ -145,22 +144,22 @@ def read_song_data(data_file):
     bass_or_kick["bass"] /= bass_or_kick_total
     bass_or_kick["kick"] /= bass_or_kick_total
 
-    clap_or_snare_total = sum(clap_or_snare.values())
-    clap_or_snare["both"] /= clap_or_snare_total
-    clap_or_snare["bass"] /= clap_or_snare_total
-    clap_or_snare["kick"] /= clap_or_snare_total
+    snare_or_clap_total = sum(snare_or_clap.values())
+    snare_or_clap["both"] /= snare_or_clap_total
+    snare_or_clap["snare"] /= snare_or_clap_total
+    snare_or_clap["clap"] /= snare_or_clap_total
 
     hatroll_amounts.sort()
     hatroll_amounts, hatroll_frequencies = np.unique(hatroll_amounts, return_counts = True)
 
     return (drum_averages,
         (tempos, tempo_frequencies),
-        no_kick_rate, bass_or_kick, clap_or_snare,
+        no_kick_rate, bass_or_kick, snare_or_clap,
         (hatroll_amounts, hatroll_frequencies))
 
 def get_arp_sound(arp_path, volume_db, max_seconds = 1):
-    arp_choice = random.choice(os.listdir(arp_path))
-    arp_file = os.path.join(arp_path, arp_choice)
+    arp_name = random.choice(os.listdir(arp_path))
+    arp_file = os.path.join(arp_path, arp_name)
     arp = a.Sound(file = arp_file)
     arp.trim_silence()
     arp.filter("hp", 400)
@@ -168,9 +167,8 @@ def get_arp_sound(arp_path, volume_db, max_seconds = 1):
     if arp.seconds > max_seconds:
         arp.resize(int(max_seconds * 44100))
     arp.fade()
-    arp.normalize(a.db_to_amplitude(volume))
-    print(arp_choice)
-    return arp
+    arp.normalize(a.db_to_amplitude(volume_db))
+    return arp, arp_name
 
 def get_drum_sounds(drum_path):
     bass_name = random.choice(os.listdir(os.path.join(drum_path, "808")))
@@ -190,6 +188,10 @@ def get_drum_sounds(drum_path):
     snare_sound = a.Sound(file = os.path.join(drum_path, "Snare", snare_name))
     snare_sound.normalize(a.db_to_amplitude(-6))
 
+    counter_snare_name = random.choice(os.listdir(os.path.join(drum_path, "Snare")))
+    counter_snare_sound = a.Sound(file = os.path.join(drum_path, "Snare", counter_snare_name))
+    counter_snare_sound.normalize(a.db_to_amplitude(-6))
+
     clap_name = random.choice(os.listdir(os.path.join(drum_path, "Clap")))
     clap_sound = a.Sound(file = os.path.join(drum_path, "Clap", clap_name))
     clap_sound.normalize(a.db_to_amplitude(-6))
@@ -205,6 +207,7 @@ def get_drum_sounds(drum_path):
     return ((bass_name, bass_sound, bass_root),
         (kick_name, kick_sound),
         (snare_name, snare_sound),
+        (counter_snare_name, counter_snare_sound),
         (clap_name, clap_sound),
         (hat_name, hat_sound),
         (openhat_name, openhat_sound))
@@ -216,9 +219,28 @@ def get_drum_pattern(sound, probabilities, bpm, repetitions = 2):
             out.place(sound, i / 2 + 1)
     return out
 
-def get_snare_pattern(snare_sound, clap_sound, snare_probalities, clap_probabilities,
-    snare_or_clap_rate, bpm, repetitions = 2):
-    ...
+def get_snare_pattern(snare_sound, counter_snare_sound, clap_sound, snare_probabilities, clap_probabilities,
+    snare_or_clap, bpm, repetitions = 2):
+    out = a.Pattern(bpm, 8 * repetitions)
+    snare_type = np.random.choice(list(snare_or_clap.keys()), p = list(snare_or_clap.values()))
+    if snare_type == "both":
+        primary_snare = clap_sound
+        secondary_snare = snare_sound
+    elif snare_type == "snare":
+        primary_snare = snare_sound
+        secondary_snare = counter_snare_sound
+    elif snare_type == "clap":
+        primary_snare = clap_sound
+        secondary_snare = clap_sound
+    for i, probability in enumerate(np.tile(snare_probabilities + clap_probabilities, repetitions)):
+        if i % 16 in (4, 12):
+            out.place(primary_snare, i / 2 + 1)
+        if snare_type != "clap" and chance(probability):
+            out.place(secondary_snare, i / 2 + 1, 0.7)
+    return out, snare_type
+
+def get_bass_kick_pattern():
+    pass
 
 """
 bpm = random.randint(125, 150)
