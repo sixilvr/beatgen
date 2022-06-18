@@ -7,16 +7,19 @@ import numpy as np
 from scipy import interpolate, signal
 
 import audio as a
+import randomselectors as rs
 
 SEED = random.getrandbits(32)
 print("Seed:", SEED)
-random.seed(SEED)
+RNG = np.random.default_rng(SEED)
+
+DRUM_NAMES = ("bass", "kick", "snare", "clap", "hatroll", "openhat")
 
 def chance(probability, true_value = 60, false_value = 0):
-    return true_value if random.random() <= probability else false_value
+    return true_value if RNG.random() <= probability else false_value
 
 def random_pdf(pdf_dict):
-    return np.random.choice(list(pdf_dict.keys()), p = list(pdf_dict.values()))
+    return RNG.choice(list(pdf_dict.keys()), p = list(pdf_dict.values()))
 
 def get_note_scale(root_midi):
     return np.array([0, 2, 3, 5, 7, 8, 12]) + root_midi
@@ -28,17 +31,17 @@ def get_arpeggio(scale, num_notes = 8, interval = 2):
     while beat_index < num_notes:
         out[beat_index] = scale[note_index % len(scale)]
         beat_index += interval
-        note_index += random.choice([-1, 1])
+        note_index += RNG.choice([-1, 1])
     return out
 
 def get_arpeggio(scale, num_notes = 8):
-    interval = random.choice([1, 2, 2, 2, 4, 4])
+    interval = RNG.choice([1, 2, 2, 2, 4, 4])
     out = [0 for _ in range(num_notes)]
     beat_index = 0
-    note_index = random.choice([0, 4])
+    note_index = RNG.choice([0, 4])
     while beat_index < num_notes:
         out[beat_index] = scale[note_index]
-        note_index = (note_index + random.choice([-3, -1, 2, 3, 4])) % len(scale)
+        note_index = (note_index + RNG.choice([-3, -1, 2, 3, 4])) % len(scale)
         beat_index += interval
     return out
 
@@ -55,7 +58,7 @@ def restrict_midi(midi, lower, upper):
     return midi
 
 def get_arp_sound(arp_path, volume_db, max_seconds = 1):
-    arp_name = random.choice(os.listdir(arp_path))
+    arp_name = RNG.choice(os.listdir(arp_path))
     arp_file = os.path.join(arp_path, arp_name)
     arp = a.Sound(file = arp_file)
     arp.trim_silence()
@@ -84,11 +87,7 @@ def get_drum_sounds(drum_path):
     snare_name = random.choice(os.listdir(os.path.join(drum_path, "Snare")))
     snare_sound = a.Sound(file = os.path.join(drum_path, "Snare", snare_name))
     snare_sound.normalize(a.db_to_amplitude(-6))
-    """
-    counter_snare_name = random.choice(os.listdir(os.path.join(drum_path, "Snare")))
-    counter_snare_sound = a.Sound(file = os.path.join(drum_path, "Snare", counter_snare_name))
-    counter_snare_sound.normalize(a.db_to_amplitude(-6))
-    """
+
     clap_name = random.choice(os.listdir(os.path.join(drum_path, "Clap")))
     clap_sound = a.Sound(file = os.path.join(drum_path, "Clap", clap_name))
     clap_sound.normalize(a.db_to_amplitude(-6))
@@ -104,7 +103,6 @@ def get_drum_sounds(drum_path):
     return ((bass_name, bass_sound, bass_root),
         (kick_name, kick_sound),
         (snare_name, snare_sound),
-        #(counter_snare_name, counter_snare_sound),
         (clap_name, clap_sound),
         (hat_name, hat_sound),
         (openhat_name, openhat_sound))
@@ -120,110 +118,38 @@ def read_song_data(data_file):
     clap pattern
     hat roll pattern
     open hat pattern
-    # song name is not used by code
-    # all patterns are 16 characters, either "1" or "0", except for hat roll, which can be "3", "4", "6", or "8"
-    # each song entry is separated by 2 newlines
-    # no newlines at the start or end of the file
+    - song name is not used by code
+    - all patterns are 16 characters, either "1" or "0", except for hat roll, which can be "3", "4", "6", or "8"
+    - each song entry is separated by 2 newlines
+    - no newlines at the start or end of the file
     """
 
     with open(data_file, "rt") as f:
         data = f.read()
     songs = data.split("\n\n")
-    num_songs = len(songs)
-
-    patterns = {}
-    patterns["bass"] = np.zeros((num_songs, 16))
-    patterns["kick"] = np.zeros((num_songs, 16))
-    patterns["snare"] = np.zeros((num_songs, 16))
-    patterns["clap"] = np.zeros((num_songs, 16))
-    patterns["hatroll"] = np.zeros((num_songs, 16))
-    patterns["openhat"] = np.zeros((num_songs, 16))
-    tempos = np.zeros(num_songs)
-    no_kick_count = 0
-    bass_or_kick = {
-        "bass": 0,
-        "kick": 0
-    }
-    snare_or_clap = {
-        "both": 0,
-        "snare": 0,
-        "clap": 0
-    }
-    hatroll_amounts = np.array([])
-
-    def parse_pattern(pattern):
-        return np.array([int(beat) for beat in pattern])
+    
+    tempos = rs.ContRandomSelector(RNG)
+    has_kick = rs.RandomSelector(RNG)
+    patterns = {name: rs.RandomPattern(8, 0.5, RNG) for name in 
+        ("bass_or_kick", "only_bass", "snare_or_clap", "hatroll", "openhat")}
 
     for i, song in enumerate(songs):
-        name, tempo, bass, kick, snare, clap, hatroll, openhat = song.split("\n")
+        song_name, tempo, bass, kick, snare, clap, hatroll, openhat = song.split("\n")
+        
+        tempos.add_data(tempo)
 
-        patterns["bass"][i] = parse_pattern(bass)
-        patterns["kick"][i] = parse_pattern(kick)
-        patterns["snare"][i] = parse_pattern(snare)
-        patterns["clap"][i] = parse_pattern(clap)
-        hatroll_pattern = parse_pattern(hatroll)
-        patterns["hatroll"][i] = np.array([1 if beat else 0 for beat in hatroll_pattern])
-        patterns["openhat"][i] = parse_pattern(openhat)
-
-        tempos[i] = int(tempo)
-
-        if "1" not in kick:
-            no_kick_count += 1
+        if "1" in kick:
+            has_kick.add_data(1)
+            patterns["bass_or_kick"].read_two_patterns(bass, kick)
         else:
-            for i in range(16):
-                if kick[i] == "1":
-                    bass_or_kick["kick"] += 1
-                if bass[i] == "1":
-                    bass_or_kick["bass"] += 1
+            has_kick.add_data(0)
+            patterns["only_bass"].read_pattern(bass)
+        
+        patterns["snare_or_clap"].read_two_patterns(snare, clap)
+        patterns["hatroll"].read_pattern(hatroll)
+        patterns["openhat"].read_pattern(openhat)
 
-        if "1" in snare and "1" in clap:
-            snare_or_clap["both"] += 1
-        elif "1" in snare and not "1" in clap:
-            snare_or_clap["snare"] += 1
-        elif "1" not in snare and "1" in clap:
-            snare_or_clap["clap"] += 1
-
-        hatroll_amounts = np.append(hatroll_amounts, np.extract(hatroll_pattern != 0, hatroll_pattern))
-
-    drum_averages = {}
-    drum_averages["bass"] = np.mean(patterns["bass"], 0)
-    drum_averages["kick"] = np.mean(patterns["kick"], 0)
-    drum_averages["snare"] = np.mean(patterns["snare"], 0)
-    drum_averages["clap"] = np.mean(patterns["clap"], 0)
-    drum_averages["hatroll"] = np.mean(patterns["hatroll"], 0)
-    drum_averages["openhat"] = np.mean(patterns["openhat"], 0)
-
-    tempos.sort()
-    tempos, tempo_frequencies = np.unique(tempos, return_counts = True)
-    tempo_pdf = interpolate.interp1d(tempos, tempo_frequencies, assume_sorted = True)
-    tempos = np.arange(min(tempos), max(tempos) + 1)
-    tempo_frequencies = tempo_pdf(tempos)
-    tempo_frequencies = signal.convolve(tempo_frequencies, np.ones(5) / 5, mode = "same")
-    tempo_frequencies /= sum(tempo_frequencies)
-
-    no_kick_rate = no_kick_count / len(songs)
-
-    bass_or_kick_total = sum(bass_or_kick.values())
-    bass_or_kick["bass"] /= bass_or_kick_total
-    bass_or_kick["kick"] /= bass_or_kick_total
-
-    snare_or_clap_total = sum(snare_or_clap.values())
-    snare_or_clap["both"] /= snare_or_clap_total
-    snare_or_clap["snare"] /= snare_or_clap_total
-    snare_or_clap["clap"] /= snare_or_clap_total
-
-    hatroll_amounts.sort()
-    hatroll_amounts, hatroll_frequencies = np.unique(hatroll_amounts, return_counts = True)
-    hatroll_amounts = hatroll_amounts.astype(int)
-    hatroll_frequencies = hatroll_frequencies.astype(float)
-    hatroll_frequencies /= sum(hatroll_frequencies)
-
-    return (drum_averages,
-        (tempos, tempo_frequencies),
-        no_kick_rate,
-        bass_or_kick,
-        snare_or_clap,
-        (hatroll_amounts, hatroll_frequencies))
+    return tempos, has_kick, patterns
 
 def get_drum_pattern(sound, probabilities, bpm, repetitions = 2):
     out = a.Pattern(bpm, 8 * repetitions)
@@ -241,7 +167,7 @@ def get_snare_notes(snare_probabilities, clap_probabilities, repetitions = 2):
         enumerate(np.tile(snare_probabilities + clap_probabilities, repetitions))]
     return primary_pattern, secondary_pattern
 
-def get_kick_bass_notes(kick_sound, bass_sound, bass_root, kick_probabilities, bass_probabilities, bass_or_kick, melody_notes):
+def get_kick_bass_notes(bass_root, kick_probabilities, bass_probabilities, bass_or_kick, melody_notes):
     def get_last_note(pattern, index):
         while pattern[index] == 0:
             index -= 1
@@ -249,7 +175,7 @@ def get_kick_bass_notes(kick_sound, bass_sound, bass_root, kick_probabilities, b
     repetitions = len(melody_notes) // 16
     kick_notes = [0 for _ in range(len(melody_notes))]
     bass_notes = [0 for _ in range(len(melody_notes))]
-    for i, probability in enumerate(np.tile((kick_probabilities + bass_probabilities) / 2, 2)):
+    for i, probability in enumerate(np.tile((kick_probabilities + bass_probabilities) / 2, repetitions)):
         if chance(probability) or i % 16 == 0:
             state = random_pdf(bass_or_kick)
             if (chance(bass_or_kick["kick"]) and (i % 16 not in (4, 12))) or i % 16 == 0:
