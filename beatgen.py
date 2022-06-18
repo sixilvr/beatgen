@@ -71,52 +71,57 @@ def get_arp_sound(arp_path, volume_db, max_seconds = 1):
     return arp, arp_name
 
 def get_drum_sounds(drum_path):
-    bass_name = random.choice(os.listdir(os.path.join(drum_path, "808")))
-    bass_sound = a.Sound(file = os.path.join(drum_path, "808", bass_name))
+    drums = {
+        "bass": {
+            "folder": "808",
+            "volume": -8
+        },
+        "kick": {
+            "folder": "Kick",
+            "volume": -7
+        },
+        "snare": {
+            "folder": "Snare",
+            "volume": -6
+        },
+        "clap": {
+            "folder": "Clap",
+            "volume": -6
+        },
+        "hat": {
+            "folder": "Hi Hat",
+            "volume": -15
+        },
+        "openhat": {
+            "folder": "Open Hat",
+            "volume": -16
+        }
+    }
+
+    for drum_data in drums.values():
+        drum_data["filename"] = RNG.choice(os.listdir(os.path.join(drum_path, drum_data["folder"])))
+        drum_data["sound"] = a.Sound(file = os.path.join(drum_path, drum_data["filename"]))
+        drum_data["sound"].normalize(a.db_to_amplitude(drum_data["volume"]))
+
+    bass_sound = drums["bass"]["sound"]
     if bass_sound.seconds > 4:
         bass_sound.resize(4 * 44100)
-    bass_sound.normalize(a.db_to_amplitude(-8))
     bass_sound.fade()
-    bass_root = restrict_midi(
-        a.frequency_to_midi(a.nearest_note_frequency(bass_sound.fundamental)), 55, 67)
+    drums["bass"]["root"] = restrict_midi(
+        a.frequency_to_midi(a.round_frequency(bass_sound.fundamental)), 55, 67)
 
-    kick_name = random.choice(os.listdir(os.path.join(drum_path, "Kick")))
-    kick_sound = a.Sound(file = os.path.join(drum_path, "Kick", kick_name))
-    kick_sound.normalize(a.db_to_amplitude(-7))
-
-    snare_name = random.choice(os.listdir(os.path.join(drum_path, "Snare")))
-    snare_sound = a.Sound(file = os.path.join(drum_path, "Snare", snare_name))
-    snare_sound.normalize(a.db_to_amplitude(-6))
-
-    clap_name = random.choice(os.listdir(os.path.join(drum_path, "Clap")))
-    clap_sound = a.Sound(file = os.path.join(drum_path, "Clap", clap_name))
-    clap_sound.normalize(a.db_to_amplitude(-6))
-
-    hat_name = random.choice(os.listdir(os.path.join(drum_path, "Hi Hat")))
-    hat_sound = a.Sound(file = os.path.join(drum_path, "Hi Hat", hat_name))
-    hat_sound.normalize(a.db_to_amplitude(-15))
-
-    openhat_name = random.choice(os.listdir(os.path.join(drum_path, "Open Hat")))
-    openhat_sound = a.Sound(file = os.path.join(drum_path, "Open Hat", openhat_name))
-    openhat_sound.normalize(a.db_to_amplitude(-16))
-
-    return ((bass_name, bass_sound, bass_root),
-        (kick_name, kick_sound),
-        (snare_name, snare_sound),
-        (clap_name, clap_sound),
-        (hat_name, hat_sound),
-        (openhat_name, openhat_sound))
+    return drums
 
 def read_song_data(data_file):
-    """
-    # Data File Format:
-    song name
-    tempo
-    bass pattern
-    kick pattern
-    snare pattern
-    clap pattern
-    hat roll pattern
+    r"""
+    ## Data File Format:
+    song name\
+    tempo\
+    bass pattern\
+    kick pattern\
+    snare pattern\
+    clap pattern\
+    hat roll pattern\
     open hat pattern
     - song name is not used by code
     - all patterns are 16 characters, either "1" or "0", except for hat roll, which can be "3", "4", "6", or "8"
