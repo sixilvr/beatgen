@@ -10,6 +10,9 @@ class RandomSelector:
         self.data = {}
         self.total_inputs = 0
 
+    def __repr__(self):
+        return f"randomselectors.RandomSelector(rng = {self.rng})"
+
     def add_data(self, key):
         if key not in self.data:
             self.data[key] = 1
@@ -30,6 +33,9 @@ class RandomPattern:
         else:
             self.rng = rng
         self.selectors = [RandomSelector(self.rng) for _ in range(int(self.beats / self.step_size))]
+
+    def __repr__(self):
+        return f"randomselectors.RandomPattern(beats = {self.beats}, step_size = {self.step_size}, rng = {self.rng})"
 
     def add_data(self, beat, key):
         selector = self.selectors[int(beat / self.step_size) - 1]
@@ -90,10 +96,13 @@ class RandomPattern:
                     out2 += "1"
         return out1, out2
 
-class ContRandomSelector(RandomSelector):
+class ContinuousRandomSelector(RandomSelector):
     def __init__(self, rng = None):
         super().__init__(rng)
-    
+
+    def __repr__(self):
+        return f"randomselectors.ContinuousRandomSelector(rng = {self.rng})"
+
     def choice(self):
         keys = list(self.data.keys())
         values = list(self.data.values())
