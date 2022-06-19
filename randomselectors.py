@@ -82,18 +82,20 @@ class RandomPattern:
         for selector in self.selectors:
             value = selector.choice()
             match value:
-                case "0":
+                case 0:
                     out1 += "0"
                     out2 += "0"
-                case "1":
+                case 1:
                     out1 += "1"
                     out2 += "0"
-                case "2":
+                case 2:
                     out1 += "0"
                     out2 += "1"
-                case "3":
+                case 3:
                     out1 += "1"
                     out2 += "1"
+                case other:
+                    raise ValueError(f"{other} was used found when generating two patterns. Only (0, 1, 2, 3) are allowed")
         return out1, out2
 
 class ContinuousRandomSelector(RandomSelector):
