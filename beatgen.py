@@ -1,4 +1,4 @@
-#TODO: soft clip iso. distort at end, possibility of no kick, metro double kick, based bpm, depends if reverse melody, make api, update random to default_rng
+#TODO: optimize each call, decrease double snare volume, soft clip iso. distort at end, depends if reverse melody, metro double kick
 
 import os
 import random
@@ -7,7 +7,7 @@ import numpy as np
 from scipy import interpolate, signal
 
 import audio as a
-import randomselectors as rs
+from . import randomselectors as rs
 
 RNG = np.random.default_rng()
 
@@ -154,18 +154,14 @@ def read_song_data(data_file, rng):
 
     return tempos, has_kick, patterns
 
-def generate_beat(filename = "test.wav", seed = None, play = False):
+def generate_beat(filename, resource_folder, seed = None, play = False):
     if seed is None:
         seed = random.getrandbits(32)
-    print("Seed:", seed)
     rng = np.random.default_rng(seed = seed)
 
-    drums = get_drum_sounds("drums", rng)
-    for drum in drums.values():
-        print(drum["filename"])
-    tempo_generator, has_kick_generator, drum_generators = read_song_data("drumdata.txt", rng)
+    drums = get_drum_sounds(os.path.join(resource_folder, "drums"), rng)
+    tempo_generator, has_kick_generator, drum_generators = read_song_data(os.path.join(resource_folder, "drumdata.txt"), rng)
     tempo = tempo_generator.choice()
-    print("Tempo:", tempo)
 
     has_kick = has_kick_generator.choice()
     if has_kick:
@@ -173,7 +169,6 @@ def generate_beat(filename = "test.wav", seed = None, play = False):
     else:
         bass_notes = drum_generators["bass_only"].generate_pattern()
         kick_notes = "0" * 16
-        print("No kick")
 
     snare_notes, clap_notes = drum_generators["snare_or_clap"].generate_two_patterns()
 
@@ -212,8 +207,19 @@ def generate_beat(filename = "test.wav", seed = None, play = False):
     if play:
         a.play_file(filename)
 
+    out_data = {
+        "seed": int(seed),
+        "tempo": int(tempo),
+        "has_kick": bool(has_kick),
+        "drum_names": []
+    }
+    for drum in drums.values():
+        out_data["drum_names"].append(drum["filename"])
+
+    return out_data
+
 if __name__ == "__main__":
-    generate_beat(play = True)
+    generate_beat("test.wav", os.path.dirname(__file__), play = True)
 
 """
 def get_drum_pattern(sound, probabilities, bpm, repetitions = 2):
