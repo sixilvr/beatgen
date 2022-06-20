@@ -1,10 +1,9 @@
-#TODO: optimize each call, decrease double snare volume, soft clip iso. distort at end, depends if reverse melody, metro double kick
+#TODO: optimize each call, decrease double snare volume, louder bass if no kick, double length patterns for some, soft clip iso. distort at end, depends if reverse melody, metro double kick
 
 import os
 import random
 
 import numpy as np
-from scipy import interpolate, signal
 
 import audio as a
 from . import randomselectors as rs
@@ -110,7 +109,7 @@ def get_drum_sounds(drum_path, rng):
 
     return drums
 
-def read_song_data(data_file, rng):
+def read_song_data(data_file):
     r"""
     ## Data File Format:
     song name\
@@ -131,12 +130,12 @@ def read_song_data(data_file, rng):
         data = f.read()
     songs = data.split("\n\n")
 
-    tempos = rs.ContinuousRandomSelector(rng)
-    has_kick = rs.RandomSelector(rng)
-    patterns = {drum_name: rs.RandomPattern(8, 0.5, rng) for drum_name in 
+    tempos = rs.ContinuousRandomSelector()
+    has_kick = rs.RandomSelector()
+    patterns = {drum_name: rs.RandomPattern(8, 0.5) for drum_name in 
         ("bass_or_kick", "bass_only", "snare_or_clap", "hatroll", "openhat")}
 
-    for i, song in enumerate(songs):
+    for song in songs:
         song_name, tempo, bass, kick, snare, clap, hatroll, openhat = song.split("\n")
 
         tempos.add_data(int(tempo))
@@ -154,58 +153,60 @@ def read_song_data(data_file, rng):
 
     return tempos, has_kick, patterns
 
-def generate_beat(filename, resource_folder, seed = None, play = False):
+def prep_beat(resource_folder):
+    tempo_generator, has_kick_generator, drum_generators = read_song_data(os.path.join(resource_folder, "drumdata.txt"))
+    return tempo_generator, has_kick_generator, drum_generators
+
+def finish_beat(resource_folder, data_generators, seed = None):
     if seed is None:
         seed = random.getrandbits(32)
     rng = np.random.default_rng(seed = seed)
+    tempo_generator, has_kick_generator, drum_generators = data_generators
 
     drums = get_drum_sounds(os.path.join(resource_folder, "drums"), rng)
-    tempo_generator, has_kick_generator, drum_generators = read_song_data(os.path.join(resource_folder, "drumdata.txt"), rng)
-    tempo = tempo_generator.choice()
+    tempo = tempo_generator.choice(rng)
+    notes = {}
 
-    has_kick = has_kick_generator.choice()
+    has_kick = has_kick_generator.choice(rng)
     if has_kick:
-        bass_notes, kick_notes = drum_generators["bass_or_kick"].generate_two_patterns()
+        notes["bass"], notes["kick"] = drum_generators["bass_or_kick"].generate_two_patterns(rng)
     else:
-        bass_notes = drum_generators["bass_only"].generate_pattern()
-        kick_notes = "0" * 16
+        notes["bass"] = drum_generators["bass_only"].generate_pattern(rng)
+        notes["kick"] = "0" * 16
+    
+    notes["snare"], notes["clap"] = drum_generators["snare_or_clap"].generate_two_patterns(rng)
 
-    snare_notes, clap_notes = drum_generators["snare_or_clap"].generate_two_patterns()
+    notes["hatroll"] = drum_generators["hatroll"].generate_pattern(rng)
+    notes["openhat"] = drum_generators["openhat"].generate_pattern(rng)
 
-    hatroll_notes = drum_generators["hatroll"].generate_pattern()
-    openhat_notes = drum_generators["openhat"].generate_pattern()
+    patterns = {}
+    for drum_name in ("kick", "snare", "clap", "openhat"):
+        patterns[drum_name] = a.Pattern(tempo, 8)
+        patterns[drum_name].place_hits(drums[drum_name]["sound"], notes[drum_name])
 
-    bass_pattern = a.Pattern(tempo)
-    bass_pattern.place_hits(drums["bass"]["sound"], bass_notes, cut = True)
-    kick_pattern = a.Pattern(tempo)
-    kick_pattern.place_hits(drums["kick"]["sound"], kick_notes)
-    snare_pattern = a.Pattern(tempo)
-    snare_pattern.place_hits(drums["snare"]["sound"], snare_notes)
-    clap_pattern = a.Pattern(tempo)
-    clap_pattern.place_hits(drums["clap"]["sound"], clap_notes)
-    hat_pattern = a.Pattern(tempo)
+    #TODO: sync with melody
+    patterns["bass"] = a.Pattern(tempo)
+    patterns["bass"].place_hits(drums["bass"]["sound"], notes["bass"], cut = True)
+
+    patterns["hat"] = a.Pattern(tempo)
     i = 0
-    while i < len(hatroll_notes):
-        repetitions = int(hatroll_notes[i])
+    while i < len(notes["hatroll"]):
+        repetitions = int(notes["hatroll"][i])
         if repetitions == 0:
-            hat_pattern.place(drums["hat"]["sound"], i / 2 + 1)
+            patterns["hat"].place(drums["hat"]["sound"], i / 2 + 1)
             i += 1
         elif repetitions in (2, 4, 6, 8):
-            hat_pattern.roll(drums["hat"]["sound"], i / 2 + 1, repetitions // 2, 1 / repetitions)
+            patterns["hat"].roll(drums["hat"]["sound"], i / 2 + 1, repetitions // 2, 1 / repetitions)
             i += 1
         elif repetitions == 3:
-            hat_pattern.roll(drums["hat"]["sound"], i / 2 + 1, repetitions, 1 / repetitions)
+            patterns["hat"].roll(drums["hat"]["sound"], i / 2 + 1, repetitions, 1 / repetitions)
             i += 2
-    openhat_pattern = a.Pattern(tempo)
-    openhat_pattern.place_hits(drums["openhat"]["sound"], openhat_notes)
 
     song = a.Pattern(tempo)
-    song.add(bass_pattern + kick_pattern + snare_pattern + clap_pattern + hat_pattern + openhat_pattern)
+    for pattern in patterns.values():
+        song.add(pattern)
     song.fade(len(song) - 200)
     song.repeat(2)
-    song.save(filename)
-    if play:
-        a.play_file(filename)
 
     out_data = {
         "seed": int(seed),
@@ -216,6 +217,14 @@ def generate_beat(filename, resource_folder, seed = None, play = False):
     for drum in drums.values():
         out_data["drum_names"].append(drum["filename"])
 
+    return song, out_data
+
+def generate_beat(filename, resource_folder, seed = None, play = False):
+    data_generators = prep_beat(resource_folder)
+    song, out_data = finish_beat(resource_folder, data_generators, seed)
+    song.save(filename)
+    if play:
+        a.play_file(filename)
     return out_data
 
 if __name__ == "__main__":
