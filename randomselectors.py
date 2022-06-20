@@ -2,16 +2,12 @@ import numpy as np
 from scipy import interpolate
 
 class RandomSelector:
-    def __init__(self, rng = None):
-        if rng is None:
-            self.rng = np.random.default_rng()
-        else:
-            self.rng = rng
+    def __init__(self):
         self.data = {}
         self.total_inputs = 0
 
     def __repr__(self):
-        return f"randomselectors.RandomSelector(rng = {self.rng})"
+        return f"randomselectors.RandomSelector()"
 
     def add_data(self, key):
         if key not in self.data:
@@ -20,22 +16,18 @@ class RandomSelector:
             self.data[key] += 1
         self.total_inputs += 1
     
-    def choice(self):
-        return self.rng.choice(list(self.data.keys()),
+    def choice(self, rng):
+        return rng.choice(list(self.data.keys()),
             p = [i / self.total_inputs for i in self.data.values()])
 
 class RandomPattern:
-    def __init__(self, beats = 8, step_size = 0.5, rng = None):
-        self.beats = 8
-        self.step_size = 0.5
-        if rng is None:
-            self.rng = np.random.default_rng()
-        else:
-            self.rng = rng
-        self.selectors = [RandomSelector(self.rng) for _ in range(int(self.beats / self.step_size))]
+    def __init__(self, beats = 8, step_size = 0.5):
+        self.beats = beats
+        self.step_size = step_size
+        self.selectors = [RandomSelector() for _ in range(int(self.beats / self.step_size))]
 
     def __repr__(self):
-        return f"randomselectors.RandomPattern(beats = {self.beats}, step_size = {self.step_size}, rng = {self.rng})"
+        return f"randomselectors.RandomPattern(beats = {self.beats}, step_size = {self.step_size})"
 
     def add_data(self, beat, key):
         selector = self.selectors[int(beat / self.step_size) - 1]
@@ -66,21 +58,21 @@ class RandomPattern:
                     value = 3
             self.selectors[i].add_data(value)
 
-    def random_value(self, beat):
+    def random_value(self, beat, rng):
         selector = self.selectors[int(beat / self.step_size) - 1]
-        return selector.choice()
+        return selector.choice(rng)
 
-    def generate_pattern(self):
+    def generate_pattern(self, rng):
         out = ""
         for selector in self.selectors:
-            out += str(selector.choice())
+            out += str(selector.choice(rng))
         return out
 
-    def generate_two_patterns(self):
+    def generate_two_patterns(self, rng):
         out1 = ""
         out2 = ""
         for selector in self.selectors:
-            value = selector.choice()
+            value = selector.choice(rng)
             match value:
                 case 0:
                     out1 += "0"
@@ -99,17 +91,17 @@ class RandomPattern:
         return out1, out2
 
 class ContinuousRandomSelector(RandomSelector):
-    def __init__(self, rng = None):
-        super().__init__(rng)
+    def __init__(self):
+        super().__init__()
 
     def __repr__(self):
-        return f"randomselectors.ContinuousRandomSelector(rng = {self.rng})"
+        return f"randomselectors.ContinuousRandomSelector()"
 
-    def choice(self):
+    def choice(self, rng):
         keys = list(self.data.keys())
         values = list(self.data.values())
         interpf = interpolate.interp1d(keys, values)
         new_keys = np.arange(min(keys), max(keys) + 1)
         new_values = interpf(new_keys)
         new_values /= sum(new_values)
-        return self.rng.choice(new_keys, p = new_values)
+        return rng.choice(new_keys, p = new_values)
