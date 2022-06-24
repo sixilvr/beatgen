@@ -62,16 +62,16 @@ class RandomPattern:
         selector = self.selectors[int(beat / self.step_size) - 1]
         return selector.choice(rng)
 
-    def generate_pattern(self, rng):
+    def generate_pattern(self, rng, repetitions = 1):
         out = ""
-        for selector in self.selectors:
+        for selector in self.selectors * repetitions:
             out += str(selector.choice(rng))
         return out
 
-    def generate_two_patterns(self, rng):
+    def generate_two_patterns(self, rng, repetitions = 1):
         out1 = ""
         out2 = ""
-        for selector in self.selectors:
+        for selector in self.selectors * repetitions:
             value = selector.choice(rng)
             match value:
                 case 0:
