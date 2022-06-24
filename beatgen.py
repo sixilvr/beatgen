@@ -1,6 +1,7 @@
-#TODO: optimize each call, decrease double snare volume, louder bass if no kick, double length patterns for some, soft clip iso. distort at end, depends if reverse melody, metro double kick
+#TODO: fix tempo, countermelody, decrease double snare volume, louder bass if no kick, mix better, double length patterns for some, soft clip iso. distort, low pitch hat rolls, depends if reverse melody, metro double kick
 
 import os
+import pprint
 import random
 
 import numpy as np
@@ -15,11 +16,22 @@ DRUM_NAMES = ("bass", "kick", "snare", "clap", "hatroll", "openhat")
 def chance(probability, true_value = 60, false_value = 0):
     return true_value if RNG.random() <= probability else false_value
 
-def random_pdf(pdf_dict):
-    return RNG.choice(list(pdf_dict.keys()), p = list(pdf_dict.values()))
+def restrict_midi(midi, lower, upper):
+    if abs(upper - lower) < 12:
+        raise ValueError(f"Lower ({lower}) and upper ({upper}) must have a difference of at least 12")
+    while True:
+        if midi < lower:
+            midi += 12
+        elif midi > upper:
+            midi -= 12
+        else:
+            break
+    return midi
 
-def get_note_scale(root_midi):
-    return np.array([0, 2, 3, 5, 7, 8, 12]) + root_midi
+def last_note(pattern, position):
+    while not pattern[position % len(pattern)]:
+        position -= 1
+    return pattern[position % len(pattern)]
 
 def get_arpeggio(scale, num_notes = 8, interval = 2):
     out = [0 for _ in range(num_notes)]
@@ -42,44 +54,35 @@ def get_arpeggio(scale, num_notes = 8):
         beat_index += interval
     return out
 
-def restrict_midi(midi, lower, upper):
-    if abs(upper - lower) < 12:
-        raise ValueError(f"Lower ({lower}) and upper ({upper}) must have a difference of at least 12")
-    while True:
-        if midi < lower:
-            midi += 12
-        elif midi > upper:
-            midi -= 12
-        else:
-            break
-    return midi
-
-def get_arp_sound(arp_path, volume_db, max_seconds = 1):
-    arp_name = RNG.choice(os.listdir(arp_path))
-    arp_file = os.path.join(arp_path, arp_name)
-    arp = a.Sound(file = arp_file)
-    arp.trim_silence()
-    arp.filter("hp", 400)
-    arp.filter("lp", 1000, 1)
-    if arp.seconds > max_seconds:
-        arp.resize(int(max_seconds * 44100))
-    arp.fade()
-    arp.normalize(a.db_to_amplitude(volume_db))
-    return arp, arp_name
+def get_instrument_sound(instr_path, volume_db, max_seconds, rng):
+    instr_name = rng.choice(os.listdir(instr_path))
+    instr_file = os.path.join(instr_path, instr_name)
+    instr = a.Sound(file = instr_file)
+    instr.trim_silence()
+    instr.filter("hp", 400)
+    # instr.filter("lp", 1000, 1)
+    if instr.seconds > max_seconds:
+        instr.resize(int(max_seconds * 44100))
+        instr.fade()
+    instr.normalize(a.db_to_amplitude(volume_db))
+    return {
+        "filename": instr_name,
+        "sound": instr
+    }
 
 def get_drum_sounds(drum_path, rng):
     drums = {
         "bass": {
             "folder": "808",
-            "volume": -8
+            "volume": -5
         },
         "kick": {
             "folder": "Kick",
-            "volume": -7
+            "volume": -6
         },
         "snare": {
             "folder": "Snare",
-            "volume": -7
+            "volume": -6
         },
         "clap": {
             "folder": "Clap",
@@ -91,7 +94,7 @@ def get_drum_sounds(drum_path, rng):
         },
         "openhat": {
             "folder": "Open Hat",
-            "volume": -16
+            "volume": -15
         }
     }
 
@@ -101,8 +104,8 @@ def get_drum_sounds(drum_path, rng):
         drum_data["sound"].normalize(a.db_to_amplitude(drum_data["volume"]))
 
     bass_sound = drums["bass"]["sound"]
-    if bass_sound.seconds > 4:
-        bass_sound.resize(4 * 44100)
+    if bass_sound.seconds > 3:
+        bass_sound.resize(3 * 44100)
     bass_sound.fade()
     drums["bass"]["root"] = restrict_midi(
         a.frequency_to_midi(a.round_frequency(bass_sound.fundamental)), 55, 67)
@@ -153,6 +156,16 @@ def read_song_data(data_file):
 
     return tempos, has_kick, patterns
 
+def get_melody_notes(scale, note_gap, length, rng):
+    out = [0 for _ in range(length)]
+    note_pos = 0
+    beat_pos = 0
+    while beat_pos < length:
+        out[beat_pos] = scale[note_pos % len(scale)]
+        note_pos += rng.choice([-3, -2, -1, 1, 2, 3])
+        beat_pos += note_gap
+    return out
+
 def prep_beat(resource_folder):
     tempo_generator, has_kick_generator, drum_generators = read_song_data(os.path.join(resource_folder, "drumdata.txt"))
     return tempo_generator, has_kick_generator, drum_generators
@@ -163,32 +176,47 @@ def finish_beat(resource_folder, data_generators, seed = None):
     rng = np.random.default_rng(seed = seed)
     tempo_generator, has_kick_generator, drum_generators = data_generators
 
-    drums = get_drum_sounds(os.path.join(resource_folder, "drums"), rng)
     tempo = tempo_generator.choice(rng)
+    key = rng.integers(a.note_to_midi("A3"), a.note_to_midi("G#4"), endpoint = True)
+    scale = np.array([0, 2, 3, 7, 8, 12]) + key
+    instr = get_instrument_sound(os.path.join(resource_folder, "instruments"), -16, 1.5, rng)
+    drums = get_drum_sounds(os.path.join(resource_folder, "drums"), rng)
     notes = {}
+
+    melody_notes = get_melody_notes(scale, rng.integers(1, 4, endpoint = True), 16, rng)
 
     has_kick = has_kick_generator.choice(rng)
     if has_kick:
-        notes["bass"], notes["kick"] = drum_generators["bass_or_kick"].generate_two_patterns(rng)
+        notes["bass"], notes["kick"] = drum_generators["bass_or_kick"].generate_two_patterns(rng, 2)
     else:
-        notes["bass"] = drum_generators["bass_only"].generate_pattern(rng)
-        notes["kick"] = "0" * 16
-    
-    notes["snare"], notes["clap"] = drum_generators["snare_or_clap"].generate_two_patterns(rng)
+        notes["bass"] = drum_generators["bass_only"].generate_pattern(rng, 2)
+        notes["kick"] = "0" * 32
 
-    notes["hatroll"] = drum_generators["hatroll"].generate_pattern(rng)
-    notes["openhat"] = drum_generators["openhat"].generate_pattern(rng)
+    notes["snare"], notes["clap"] = drum_generators["snare_or_clap"].generate_two_patterns(rng, 2)
+
+    notes["hatroll"] = drum_generators["hatroll"].generate_pattern(rng, 2)
+    notes["openhat"] = drum_generators["openhat"].generate_pattern(rng) * 2
+
+    melody_pattern = a.Pattern(tempo, 8)
+    melody_pattern.place_midi(instr["sound"], melody_notes)
+    melody_pattern.fade(len(melody_pattern) - 200)
 
     patterns = {}
     for drum_name in ("kick", "snare", "clap", "openhat"):
-        patterns[drum_name] = a.Pattern(tempo, 8)
+        patterns[drum_name] = a.Pattern(tempo, 16)
         patterns[drum_name].place_hits(drums[drum_name]["sound"], notes[drum_name])
 
-    #TODO: sync with melody
-    patterns["bass"] = a.Pattern(tempo)
-    patterns["bass"].place_hits(drums["bass"]["sound"], notes["bass"], cut = True)
+    patterns["bass"] = a.Pattern(tempo, 16)
+    bass_midi = []
+    for i in range(len(notes["bass"])):
+        if notes["bass"][i] == "1":
+            bass_midi.append(restrict_midi(last_note(melody_notes, i), 55, 67))
+        else:
+            bass_midi.append(0)
+    patterns["bass"].place_midi(drums["bass"]["sound"], bass_midi, cut = True, root_note = drums["bass"]["root"])
+    patterns["bass"].fade(len(patterns["bass"]) - 200)
 
-    patterns["hat"] = a.Pattern(tempo)
+    patterns["hat"] = a.Pattern(tempo, 16)
     i = 0
     while i < len(notes["hatroll"]):
         repetitions = int(notes["hatroll"][i])
@@ -202,24 +230,32 @@ def finish_beat(resource_folder, data_generators, seed = None):
             patterns["hat"].roll(drums["hat"]["sound"], i / 2 + 1, repetitions, 1 / repetitions)
             i += 2
 
-    song = a.Pattern(tempo)
+    song = a.Arrangement(tempo, 16)
+    song.repeat_pattern(melody_pattern)
     for pattern in patterns.values():
-        song.add(pattern)
+        song.repeat_pattern(pattern, 5)
     song.fade(len(song) - 200)
-    song.repeat(2)
 
     out_data = {
         "seed": int(seed),
         "tempo": int(tempo),
+        "key": a.midi_to_note(key)[:-1],
         "has_kick": bool(has_kick),
-        "drum_names": []
+        "melody": {
+            "filename": instr["filename"],
+            "pattern": [a.midi_to_note(note) if note != 0 else "0" for note in melody_notes]
+        },
+        "drums": {}
     }
-    for drum in drums.values():
-        out_data["drum_names"].append(drum["filename"])
+    for drum_name in drums:
+        out_data["drums"][drum_name] = {
+            "filename": drums[drum_name]["filename"],
+            "pattern":  notes[drum_name if drum_name != "hat" else "hatroll"]
+        }
 
     return song, out_data
 
-def generate_beat(filename, resource_folder, seed = None, play = False):
+def generate_beat(filename, resource_folder = os.path.dirname(__file__), seed = None, play = False):
     data_generators = prep_beat(resource_folder)
     song, out_data = finish_beat(resource_folder, data_generators, seed)
     song.save(filename)
@@ -228,7 +264,8 @@ def generate_beat(filename, resource_folder, seed = None, play = False):
     return out_data
 
 if __name__ == "__main__":
-    generate_beat("test.wav", os.path.dirname(__file__), play = True)
+    data = generate_beat("test.wav", os.path.dirname(__file__), play = True)
+    pprint.pprint(data)
 
 """
 def get_drum_pattern(sound, probabilities, bpm, repetitions = 2):
