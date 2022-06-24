@@ -179,11 +179,11 @@ def finish_beat(resource_folder, data_generators, seed = None):
     tempo = tempo_generator.choice(rng)
     key = rng.integers(a.note_to_midi("A3"), a.note_to_midi("G#4"), endpoint = True)
     scale = np.array([0, 2, 3, 7, 8, 12]) + key
-    instr = get_instrument_sound(os.path.join(resource_folder, "instruments"), -16, 1.5, rng)
+    instr = get_instrument_sound(os.path.join(resource_folder, "instruments"), -18, 1.5, rng)
     drums = get_drum_sounds(os.path.join(resource_folder, "drums"), rng)
     notes = {}
 
-    melody_notes = get_melody_notes(scale, rng.integers(1, 4, endpoint = True), 16, rng)
+    melody_notes = get_melody_notes(scale, rng.integers(1, 4, endpoint = True), 16, rng) * 2
 
     has_kick = has_kick_generator.choice(rng)
     if has_kick:
@@ -197,7 +197,7 @@ def finish_beat(resource_folder, data_generators, seed = None):
     notes["hatroll"] = drum_generators["hatroll"].generate_pattern(rng, 2)
     notes["openhat"] = drum_generators["openhat"].generate_pattern(rng) * 2
 
-    melody_pattern = a.Pattern(tempo, 8)
+    melody_pattern = a.Pattern(tempo, 16)
     melody_pattern.place_midi(instr["sound"], melody_notes)
     melody_pattern.fade(len(melody_pattern) - 200)
 
@@ -230,10 +230,14 @@ def finish_beat(resource_folder, data_generators, seed = None):
             patterns["hat"].roll(drums["hat"]["sound"], i / 2 + 1, repetitions, 1 / repetitions)
             i += 2
 
-    song = a.Arrangement(tempo, 16)
-    song.repeat_pattern(melody_pattern)
-    for pattern in patterns.values():
-        song.repeat_pattern(pattern, 5)
+    song = a.Arrangement(tempo, 8, 16)
+    song.arrange_pattern(melody_pattern,      "11111111")
+    song.arrange_pattern(patterns["bass"],    "00111111")
+    song.arrange_pattern(patterns["kick"],    "00111100")
+    song.arrange_pattern(patterns["snare"],   "00111111")
+    song.arrange_pattern(patterns["clap"],    "00111111")
+    song.arrange_pattern(patterns["hat"],     "00111111")
+    song.arrange_pattern(patterns["openhat"], "00111100")
     song.fade(len(song) - 200)
 
     out_data = {
