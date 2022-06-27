@@ -1,5 +1,6 @@
 *.pyc
 __pycache__/
 *.mp3
-*.wav
+test.wav
+__temp__.wav
 convert.bat
