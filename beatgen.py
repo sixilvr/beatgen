@@ -74,11 +74,11 @@ def get_drum_sounds(drum_path, rng):
     drums = {
         "bass": {
             "folder": "808",
-            "volume": -5
+            "volume": -4
         },
         "kick": {
             "folder": "Kick",
-            "volume": -6
+            "volume": -5
         },
         "snare": {
             "folder": "Snare",
@@ -179,7 +179,7 @@ def finish_beat(resource_folder, data_generators, seed = None):
     tempo = tempo_generator.choice(rng)
     key = rng.integers(a.note_to_midi("A3"), a.note_to_midi("G#4"), endpoint = True)
     scale = np.array([0, 2, 3, 7, 8, 12]) + key
-    instr = get_instrument_sound(os.path.join(resource_folder, "instruments"), -18, 1.5, rng)
+    instr = get_instrument_sound(os.path.join(resource_folder, "instruments"), -16, 1.5, rng)
     drums = get_drum_sounds(os.path.join(resource_folder, "drums"), rng)
     notes = {}
 
@@ -230,14 +230,14 @@ def finish_beat(resource_folder, data_generators, seed = None):
             patterns["hat"].roll(drums["hat"]["sound"], i / 2 + 1, repetitions, 1 / repetitions)
             i += 2
 
-    song = a.Arrangement(tempo, 8, 16)
-    song.arrange_pattern(melody_pattern,      "11111111")
-    song.arrange_pattern(patterns["bass"],    "00111111")
-    song.arrange_pattern(patterns["kick"],    "00111100")
-    song.arrange_pattern(patterns["snare"],   "00111111")
-    song.arrange_pattern(patterns["clap"],    "00111111")
-    song.arrange_pattern(patterns["hat"],     "00111111")
-    song.arrange_pattern(patterns["openhat"], "00111100")
+    song = a.Arrangement(tempo, 12, 16)
+    song.arrange_pattern(melody_pattern,      "111111111111")
+    song.arrange_pattern(patterns["bass"],    "001111111100")
+    song.arrange_pattern(patterns["kick"],    "001111001111")
+    song.arrange_pattern(patterns["snare"],   "001111111111")
+    song.arrange_pattern(patterns["clap"],    "001111111111")
+    song.arrange_pattern(patterns["hat"],     "001111111100")
+    song.arrange_pattern(patterns["openhat"], "001111000011")
     song.fade(len(song) - 200)
 
     out_data = {
@@ -262,6 +262,7 @@ def finish_beat(resource_folder, data_generators, seed = None):
 def generate_beat(filename, resource_folder = os.path.dirname(__file__), seed = None, play = False):
     data_generators = prep_beat(resource_folder)
     song, out_data = finish_beat(resource_folder, data_generators, seed)
+    song.soft_clip()
     song.save(filename)
     if play:
         a.play_file(filename)
