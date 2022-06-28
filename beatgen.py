@@ -1,7 +1,6 @@
-#TODO: fix tempo, countermelody, decrease double snare volume, louder bass if no kick, mix better, double length patterns for some, soft clip iso. distort, low pitch hat rolls, depends if reverse melody, metro double kick
+#TODO: fix tempo, countermelody, decrease double snare volume, louder bass if no kick, variable arp length, low pitch hat rolls, depends if reverse melody, metro double kick
 
 import os
-import pprint
 import random
 
 import numpy as np
@@ -179,7 +178,7 @@ def finish_beat(resource_folder, data_generators, seed = None):
     tempo = tempo_generator.choice(rng)
     key = rng.integers(a.note_to_midi("A3"), a.note_to_midi("G#4"), endpoint = True)
     scale = np.array([0, 2, 3, 7, 8, 12]) + key
-    instr = get_instrument_sound(os.path.join(resource_folder, "instruments"), -16, 1.5, rng)
+    instr = get_instrument_sound(os.path.join(resource_folder, "instruments"), -16, 1, rng)
     drums = get_drum_sounds(os.path.join(resource_folder, "drums"), rng)
     notes = {}
 
@@ -267,10 +266,6 @@ def generate_beat(filename, resource_folder = os.path.dirname(__file__), seed = 
     if play:
         a.play_file(filename)
     return out_data
-
-if __name__ == "__main__":
-    data = generate_beat("test.wav", os.path.dirname(__file__), play = True)
-    pprint.pprint(data)
 
 """
 def get_drum_pattern(sound, probabilities, bpm, repetitions = 2):
