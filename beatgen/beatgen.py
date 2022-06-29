@@ -1,4 +1,4 @@
-#TODO: fix tempo, countermelody, decrease double snare volume, louder bass if no kick, variable arp length, low pitch hat rolls, depends if reverse melody, metro double kick
+#TODO: fix tempo, countermelody, decrease double snare volume, louder bass if no kick, variable arp length, low pitch hat rolls, depends if reverse melody, metro double kick, melody harmony, trained melody
 
 import os
 import random

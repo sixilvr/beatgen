@@ -6,5 +6,6 @@ setup(name = "beatgen",
     author = "SL",
     url = "https://github.com/sixilvr/beatgen",
     packages = ["beatgen"],
-    requires = ["audio", "numpy"]
+    install_requires = ["audio", "numpy"],
+    package_data = {"beatgen": ["*.txt", "drums/*/*", "instruments/*"]}
 )
