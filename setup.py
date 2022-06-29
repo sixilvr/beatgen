@@ -6,5 +6,5 @@ setup(name = "beatgen",
     author = "SL",
     url = "https://github.com/sixilvr/beatgen",
     packages = ["beatgen"],
-    requires = ["audio @ git+https://github.com/sixilvr/audio", "numpy"]
+    requires = ["audio", "numpy"]
 )
