@@ -1,4 +1,6 @@
 *.pyc
 beatgen/__pycache__/
+test.wav
+__tempo__.wav
 build
 *.egg-info
