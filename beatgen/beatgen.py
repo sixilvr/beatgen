@@ -32,24 +32,24 @@ def last_note(pattern, position):
         position -= 1
     return pattern[position % len(pattern)]
 
-def get_arpeggio(scale, num_notes = 8, interval = 2):
+def get_arpeggio(scale, rng, num_notes = 8, interval = 2):
     out = [0 for _ in range(num_notes)]
     beat_index = 0
     note_index = 0
     while beat_index < num_notes:
         out[beat_index] = scale[note_index % len(scale)]
         beat_index += interval
-        note_index += RNG.choice([-1, 1])
+        note_index += rng.choice([-1, 1])
     return out
 
-def get_arpeggio(scale, num_notes = 8):
-    interval = RNG.choice([1, 2, 2, 2, 4, 4])
+def get_arpeggio(scale, rng, num_notes = 8):
+    interval = rng.choice([1, 2, 2, 2, 4, 4])
     out = [0 for _ in range(num_notes)]
     beat_index = 0
-    note_index = RNG.choice([0, 4])
+    note_index = rng.choice([0, 4])
     while beat_index < num_notes:
         out[beat_index] = scale[note_index]
-        note_index = (note_index + RNG.choice([-3, -1, 2, 3, 4])) % len(scale)
+        note_index = (note_index + rng.choice([-3, -1, 2, 3, 4])) % len(scale)
         beat_index += interval
     return out
 
@@ -59,7 +59,6 @@ def get_instrument_sound(instr_path, volume_db, max_seconds, rng):
     instr = a.Sound(file = instr_file)
     instr.trim_silence()
     instr.filter("hp", 400)
-    # instr.filter("lp", 1000, 1)
     if instr.seconds > max_seconds:
         instr.resize(int(max_seconds * 44100))
         instr.fade()
@@ -81,7 +80,7 @@ def get_drum_sounds(drum_path, rng):
         },
         "snare": {
             "folder": "Snare",
-            "volume": -7
+            "volume": -6
         },
         "clap": {
             "folder": "Clap",
@@ -155,7 +154,58 @@ def read_song_data(data_file):
 
     return tempos, has_kick, patterns
 
-def get_melody_notes(scale, length, reps, hits_per_rep, rng):
+def read_melody_data(data_file): # too random
+    with open(data_file, "rt") as f:
+        data = f.read()
+    songs = data.split("\n\n")
+
+    short_or_long = rs.RandomSelector()
+    short_patterns = rs.RandomPattern(beats = 8)
+    long_patterns = rs.RandomPattern(beats = 16)
+
+    for song in songs:
+        song_name, melody = song.split("\n")
+        pattern_length = int(len(melody) / 16)
+
+        if pattern_length == 1:
+            short_or_long.add_data("short")
+            short_patterns.read_pattern(melody)
+        elif pattern_length == 2:
+            short_or_long.add_data("long")
+            long_patterns.read_pattern(melody)
+
+    return short_or_long, short_patterns, long_patterns
+
+def read_melody_data(data_file): # no long
+    with open(data_file, "rt") as f:
+        data = f.read()
+    songs = data.split("\n\n")
+
+    selector = rs.RandomPattern(beats = 8)
+
+    for song in songs:
+        song_name, melody = song.split("\n")
+        pattern_length = int(len(melody) / 16)
+        if pattern_length == 1:
+            selector.read_pattern(melody)
+        elif pattern_length == 2:
+            selector.read_pattern(melody[:16])
+            selector.read_pattern(melody[16:])
+
+    return selector
+
+def get_melody_notes(scale, note_gap, length, rng): # good
+    out = [0 for _ in range(length)]
+    note_pos = 0
+    beat_pos = 0
+    while beat_pos < length:
+        out[beat_pos] = scale[note_pos % len(scale)]
+        note_pos += rng.choice([-3, -2, -1, 1, 2, 3])
+        beat_pos += note_gap
+    return out
+
+"""
+def get_melody_notes(scale, length, reps, hits_per_rep, rng): # experimental
     rep_length = int(length / reps)
     hits = [rng.choice(scale) if chance(hits_per_rep / rep_length, rng) else False for _ in range(rep_length)]
     hits[0] = scale[0]
@@ -168,25 +218,45 @@ def get_melody_notes(scale, length, reps, hits_per_rep, rng):
                     rep[i] = rng.choice(scale + [0])
         out.extend(rep)
     return out
+"""
+
+def get_melody_notes(scale, melody_selectors, rng):
+    length_selector, short_selector, long_selector = melody_selectors
+    length = length_selector.choice(rng)
+    pattern_selector = short_selector if (length == "short") else long_selector
+    degrees = pattern_selector.generate_pattern(rng)
+    if length == "short":
+        degrees *= 2
+    notes = [scale[int(degree) - 1] if degree != "0" else 0 for degree in degrees]
+    return notes
+
+def get_melody_notes(scale, melody_selector, rng):
+    degrees = melody_selector.generate_pattern(rng)
+    degrees *= 2
+    notes = [scale[(int(degree) - 1) % len(scale)] if degree != "0" else 0 for degree in degrees]
+    return notes
 
 def prep_beat(resource_folder):
     tempo_generator, has_kick_generator, drum_generators = read_song_data(os.path.join(resource_folder, "drumdata.txt"))
-    return tempo_generator, has_kick_generator, drum_generators
+    melody_generator = read_melody_data(os.path.join(resource_folder, "melodydata.txt"))
+    return tempo_generator, melody_generator, has_kick_generator, drum_generators
 
 def finish_beat(resource_folder, data_generators, seed = None):
     if seed is None:
         seed = random.getrandbits(32)
     rng = np.random.default_rng(seed = seed)
-    tempo_generator, has_kick_generator, drum_generators = data_generators
+    tempo_generator, melody_generator, has_kick_generator, drum_generators = data_generators
 
     tempo = tempo_generator.choice(rng)
     key = rng.integers(a.note_to_midi("A3"), a.note_to_midi("G#4"), endpoint = True)
-    scale = np.array([0, 3, 7, 8, 12]) + key
+    # scale = np.array([0, 3, 7, 8, 12]) + key
+    scale = np.array([0, 2, 3, 5, 7, 8, 11]) + key
     instr = get_instrument_sound(os.path.join(resource_folder, "instruments"), -16, 1, rng)
     drums = get_drum_sounds(os.path.join(resource_folder, "drums"), rng)
     notes = {}
 
-    melody_notes = get_melody_notes(scale, 32, 2, rng.integers(3, 8, endpoint = True), rng)
+    #melody_notes = get_melody_notes(scale, 32, 2, rng.integers(8, 12, endpoint = True), rng)
+    melody_notes = get_melody_notes(scale, melody_generator, rng)
 
     has_kick = has_kick_generator.choice(rng)
     if has_kick:
@@ -242,6 +312,7 @@ def finish_beat(resource_folder, data_generators, seed = None):
     song.arrange_pattern(patterns["hat"],     "001111111100")
     song.arrange_pattern(patterns["openhat"], "000011000011")
     song.fade(len(song) - 200)
+    song.soft_clip()
 
     out_data = {
         "seed": int(seed),
@@ -266,7 +337,6 @@ def finish_beat(resource_folder, data_generators, seed = None):
 def generate_beat(filename, resource_folder = os.path.dirname(__file__), seed = None, play = False):
     data_generators = prep_beat(resource_folder)
     song, out_data = finish_beat(resource_folder, data_generators, seed)
-    song.soft_clip()
     song.save(filename)
     if play:
         a.play_file(filename)
