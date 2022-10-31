@@ -72,7 +72,7 @@ def get_drum_sounds(drum_path, rng):
     drums = {
         "bass": {
             "folder": "808",
-            "volume": -4
+            "volume": -5
         },
         "kick": {
             "folder": "Kick",
@@ -80,7 +80,7 @@ def get_drum_sounds(drum_path, rng):
         },
         "snare": {
             "folder": "Snare",
-            "volume": -6
+            "volume": -6.5
         },
         "clap": {
             "folder": "Clap",
@@ -88,7 +88,7 @@ def get_drum_sounds(drum_path, rng):
         },
         "hat": {
             "folder": "Hi Hat",
-            "volume": -15
+            "volume": -16
         },
         "openhat": {
             "folder": "Open Hat",
@@ -184,7 +184,7 @@ def read_melody_data(data_file): # no long
     selector = rs.RandomPattern(beats = 8)
 
     for song in songs:
-        song_name, melody = song.split("\n")
+        song_name, melody, timebase = song.split("\n")
         pattern_length = int(len(melody) / 16)
         if pattern_length == 1:
             selector.read_pattern(melody)
@@ -250,13 +250,15 @@ def finish_beat(resource_folder, data_generators, seed = None):
     tempo = tempo_generator.choice(rng)
     key = rng.integers(a.note_to_midi("A3"), a.note_to_midi("G#4"), endpoint = True)
     # scale = np.array([0, 3, 7, 8, 12]) + key
-    scale = np.array([0, 2, 3, 5, 7, 8, 11]) + key
+    scale = np.array([0, 2, 3, 5, 7, 8, 10]) + key
     instr = get_instrument_sound(os.path.join(resource_folder, "instruments"), -16, 1, rng)
+    instr2 = get_instrument_sound(os.path.join(resource_folder, "instruments"), -20, 1, rng)
     drums = get_drum_sounds(os.path.join(resource_folder, "drums"), rng)
     notes = {}
 
     #melody_notes = get_melody_notes(scale, 32, 2, rng.integers(8, 12, endpoint = True), rng)
     melody_notes = get_melody_notes(scale, melody_generator, rng)
+    counter_melody_notes = get_melody_notes(scale, melody_generator, rng)
 
     has_kick = has_kick_generator.choice(rng)
     if has_kick:
@@ -273,6 +275,11 @@ def finish_beat(resource_folder, data_generators, seed = None):
     melody_pattern = a.Pattern(tempo, 16)
     melody_pattern.place_midi(instr["sound"], melody_notes)
     melody_pattern.fade(len(melody_pattern) - 200)
+
+    counter_melody_pattern = a.Pattern(tempo, 16)
+    if chance(0.96, rng):
+        counter_melody_pattern.place_midi(instr2["sound"], counter_melody_notes)
+    counter_melody_pattern.fade(len(counter_melody_pattern) - 200)
 
     patterns = {}
     for drum_name in ("kick", "snare", "clap", "openhat"):
@@ -304,13 +311,14 @@ def finish_beat(resource_folder, data_generators, seed = None):
             i += 2
 
     song = a.Arrangement(tempo, 12, 16)
-    song.arrange_pattern(melody_pattern,      "111111111111")
-    song.arrange_pattern(patterns["bass"],    "001111111100")
-    song.arrange_pattern(patterns["kick"],    "001111001111")
-    song.arrange_pattern(patterns["snare"],   "001111111111")
-    song.arrange_pattern(patterns["clap"],    "001111111111")
-    song.arrange_pattern(patterns["hat"],     "001111111100")
-    song.arrange_pattern(patterns["openhat"], "000011000011")
+    song.arrange_pattern(melody_pattern,         "111111111111")
+    song.arrange_pattern(counter_melody_pattern, "010011001100")
+    song.arrange_pattern(patterns["bass"],       "001111111100")
+    song.arrange_pattern(patterns["kick"],       "001111001111")
+    song.arrange_pattern(patterns["snare"],      "001111111111")
+    song.arrange_pattern(patterns["clap"],       "001111111111")
+    song.arrange_pattern(patterns["hat"],        "001111111100")
+    song.arrange_pattern(patterns["openhat"],    "000011000011")
     song.fade(len(song) - 200)
     song.soft_clip()
 
@@ -322,6 +330,10 @@ def finish_beat(resource_folder, data_generators, seed = None):
         "melody": {
             "filename": instr["filename"],
             "pattern": [a.midi_to_note(note) if note != 0 else "0" for note in melody_notes]
+        },
+        "counter_melody": {
+            "filename": instr2["filename"],
+            "pattern": [a.midi_to_note(note) if note != 0 else "0" for note in counter_melody_notes]
         },
         "drums": {}
     }

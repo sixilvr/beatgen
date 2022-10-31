@@ -1,7 +1,7 @@
 from distutils.core import setup
 
 setup(name = "beatgen",
-    version = "1.1",
+    version = "1.2",
     description = "A Python library for randomly generating music",
     author = "SL",
     url = "https://github.com/sixilvr/beatgen",
