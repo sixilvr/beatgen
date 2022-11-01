@@ -72,7 +72,7 @@ def get_drum_sounds(drum_path, rng):
     drums = {
         "bass": {
             "folder": "808",
-            "volume": -5
+            "volume": -6
         },
         "kick": {
             "folder": "Kick",
@@ -236,6 +236,40 @@ def get_melody_notes(scale, melody_selector, rng):
     notes = [scale[(int(degree) - 1) % len(scale)] if degree != "0" else 0 for degree in degrees]
     return notes
 
+def get_counter_melody(melody, rng):
+    counter = []
+    for i in range(len(melody)):
+        if chance(0.5, rng) or (i % 8) == 0:
+            if melody[i]: # harmonize
+                if chance(0.6, rng):
+                    counter.append(melody[i])
+                else:
+                    counter.append(melody[(i + 3) % len(melody)])
+            else: # new note
+                counter.append(rng.choice(melody))
+        else:
+            counter.append(0)
+    return counter
+
+def get_counter_melody(length, scale, rng):
+    counter = [0 for _ in range(8)]
+    timebase = rng.choice([2,    3,    4,    6,    8],
+                      p = [0.05, 0.20, 0.25, 0.25, 0.25])
+    i = 0
+    while i < len(counter):
+        note = scale[rng.choice([0, 2, 4, 5])]
+        counter[i] = note
+        i += timebase
+    counter[0] = scale[0]
+    initial_counter = counter.copy()
+    while len(counter) < length:
+        variation = initial_counter.copy()
+        for i in range(len(variation)):
+            if initial_counter[i] and chance(0.4, rng):
+                variation[i] = scale[rng.choice([0, 2, 4, 5])]
+        counter += variation
+    return counter
+
 def prep_beat(resource_folder):
     tempo_generator, has_kick_generator, drum_generators = read_song_data(os.path.join(resource_folder, "drumdata.txt"))
     melody_generator = read_melody_data(os.path.join(resource_folder, "melodydata.txt"))
@@ -258,7 +292,7 @@ def finish_beat(resource_folder, data_generators, seed = None):
 
     #melody_notes = get_melody_notes(scale, 32, 2, rng.integers(8, 12, endpoint = True), rng)
     melody_notes = get_melody_notes(scale, melody_generator, rng)
-    counter_melody_notes = get_melody_notes(scale, melody_generator, rng)
+    counter_melody_notes = get_counter_melody(len(melody_notes), scale, rng)
 
     has_kick = has_kick_generator.choice(rng)
     if has_kick:
@@ -277,7 +311,7 @@ def finish_beat(resource_folder, data_generators, seed = None):
     melody_pattern.fade(len(melody_pattern) - 200)
 
     counter_melody_pattern = a.Pattern(tempo, 16)
-    if chance(0.96, rng):
+    if chance(0.9, rng):
         counter_melody_pattern.place_midi(instr2["sound"], counter_melody_notes)
     counter_melody_pattern.fade(len(counter_melody_pattern) - 200)
 
@@ -312,13 +346,13 @@ def finish_beat(resource_folder, data_generators, seed = None):
 
     song = a.Arrangement(tempo, 12, 16)
     song.arrange_pattern(melody_pattern,         "111111111111")
-    song.arrange_pattern(counter_melody_pattern, "010011001100")
+    song.arrange_pattern(counter_melody_pattern, "010011110011")
     song.arrange_pattern(patterns["bass"],       "001111111100")
-    song.arrange_pattern(patterns["kick"],       "001111001111")
+    song.arrange_pattern(patterns["kick"],       "001100111111")
     song.arrange_pattern(patterns["snare"],      "001111111111")
     song.arrange_pattern(patterns["clap"],       "001111111111")
     song.arrange_pattern(patterns["hat"],        "001111111100")
-    song.arrange_pattern(patterns["openhat"],    "000011000011")
+    song.arrange_pattern(patterns["openhat"],    "000011110011")
     song.fade(len(song) - 200)
     song.soft_clip()
 
